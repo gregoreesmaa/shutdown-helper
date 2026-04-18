@@ -16,31 +16,36 @@ An ultra-low footprint Rust utility to remotely shut down Windows machines via a
 - **Persistent Audit**: Generates a unique, timestamped log file on every boot for auditing.
 - **Zero-Config Deployment**: Includes a PowerShell script for one-command installation.
 
-## Prerequisites
-
-- **Rust**: You must have the Rust toolchain installed to build the binary. [Install Rust](https://www.rust-lang.org/tools/install).
-
 ## Installation
 
-1. **Build & Install**:
-   Run as Administrator:
+### Method 1: Prebuilt Release (Recommended)
+
+1. **Download**: Get the latest `shutdown-helper-windows.zip` from the [Releases](https://github.com/gregoreesmaa/shutdown-helper/releases) page.
+2. **Extract**: Unzip the contents to a folder on your Windows machine.
+3. **Install**: Right-click `setup.ps1` and select **Run with PowerShell** (or run as Administrator in a terminal).
+   - The script will install the service to `C:\Program Files\ShutdownHelper`.
+   - If no `.env` exists, it will **automatically generate a secure random `AUTH_TOKEN`** and display it for you.
+   - It will default to listening on `0.0.0.0:7986`.
+
+### Method 2: Build from Source
+
+1. **Prerequisites**: Ensure you have the [Rust toolchain](https://www.rust-lang.org/tools/install) installed.
+2. **Clone & Install**:
+   Run as Administrator in the project root:
    ```powershell
    ./setup.ps1
    ```
-   This installs the helper to `C:\Program Files\ShutdownHelper`.
+   The script will detect the source code, build an optimized release binary, and install it as a service.
 
-2. **Configure**:
-   Edit `C:\Program Files\ShutdownHelper\.env` (the script creates a default one if missing):
-   ```env
-   BIND_ADDRESS=0.0.0.0:7986
-   AUTH_TOKEN=your-secret-token
-   LOG_DIR=logs
-   ```
+## Configuration
 
-3. **Apply Changes**:
-   ```powershell
-   Restart-Service ShutdownHelper
-   ```
+If you need to change settings after installation, edit `C:\Program Files\ShutdownHelper\.env`:
+```env
+BIND_ADDRESS=0.0.0.0:7986
+AUTH_TOKEN=your-secret-token
+LOG_DIR=logs
+```
+Then restart the service: `Restart-Service ShutdownHelper`.
 
 ## Usage
 
