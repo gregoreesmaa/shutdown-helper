@@ -16,6 +16,10 @@ An ultra-low footprint Rust utility to remotely shut down Windows machines via a
 - **Persistent Audit**: Generates a unique, timestamped log file on every boot for auditing.
 - **Zero-Config Deployment**: Includes a PowerShell script for one-command installation.
 
+## Prerequisites
+
+- **Rust**: You must have the Rust toolchain installed to build the binary. [Install Rust](https://www.rust-lang.org/tools/install).
+
 ## Installation
 
 1. **Build & Install**:
