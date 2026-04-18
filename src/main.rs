@@ -161,14 +161,16 @@ fn run_server_loop(base_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> 
                 let _ = stream.set_read_timeout(Some(NETWORK_TIMEOUT));
                 let _ = stream.set_write_timeout(Some(NETWORK_TIMEOUT));
 
-                match handle_connection(&mut stream, auth_token) {
+                let peer_addr = stream.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "unknown".to_string());
+
+                match handle_connection(&mut stream, auth_token, &peer_addr) {
                     Ok(true) => {
-                        info!("Shutdown signal received and authorized. Shutting down system.");
+                        info!("Shutdown signal received and authorized from {}. Shutting down system.", peer_addr);
                         let _ = system_shutdown::shutdown();
                         break;
                     }
                     Ok(false) => {}
-                    Err(e) => warn!("Error handling connection: {}", e),
+                    Err(e) => warn!("Error handling connection from {}: {}", peer_addr, e),
                 }
             }
             Err(e) => warn!("Connection failed: {}", e),
@@ -178,7 +180,7 @@ fn run_server_loop(base_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
-fn handle_connection(stream: &mut TcpStream, expected_token: &[u8]) -> Result<bool, Box<dyn std::error::Error>> {
+fn handle_connection(stream: &mut TcpStream, expected_token: &[u8], peer_addr: &str) -> Result<bool, Box<dyn std::error::Error>> {
     let mut buffer = [0u8; READ_BUFFER_SIZE];
     let n = stream.read(&mut buffer)?;
     if n == 0 { return Ok(false); }
@@ -210,7 +212,7 @@ fn handle_connection(stream: &mut TcpStream, expected_token: &[u8]) -> Result<bo
         let _ = stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n");
         Ok(true)
     } else {
-        warn!("Unauthorized access attempt");
+        warn!("Unauthorized access attempt from {}", peer_addr);
         let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\n\r\n");
         Ok(false)
     }
@@ -230,7 +232,7 @@ mod tests {
 
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            handle_connection(&mut stream, b"secret").unwrap();
+            handle_connection(&mut stream, b"secret", "127.0.0.1").unwrap();
         });
 
         let mut client = TcpStream::connect(addr).unwrap();
@@ -248,7 +250,7 @@ mod tests {
 
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            handle_connection(&mut stream, b"secret").unwrap();
+            handle_connection(&mut stream, b"secret", "127.0.0.1").unwrap();
         });
 
         let mut client = TcpStream::connect(addr).unwrap();
@@ -266,7 +268,7 @@ mod tests {
 
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            handle_connection(&mut stream, b"secret").unwrap();
+            handle_connection(&mut stream, b"secret", "127.0.0.1").unwrap();
         });
 
         let mut client = TcpStream::connect(addr).unwrap();
