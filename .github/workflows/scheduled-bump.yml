@@ -1,0 +1,57 @@
+name: Scheduled Version Bump
+
+on:
+  schedule:
+    # Runs every 97 days at midnight
+    # 0 0 */97 * * is not supported by standard cron in GH Actions (limit is usually 31 days).
+    # Instead, we run every 97th day by checking the date or running every few months.
+    # Alternatively, running every 3 months is simpler: 0 0 1 */3 *
+    # But since the user specifically asked for 97 days, we'll use a script to check.
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual triggering for testing
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && ( $(( $(date +%s) / 86400 % 97 )) == 0 ))
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update dependencies
+        run: cargo update
+
+      - name: Bump patch version
+        run: |
+          # Read current version
+          VERSION=$(grep '^version =' Cargo.toml | head -n 1 | cut -d '"' -f 2)
+          echo "Current version: $VERSION"
+
+          # Increment patch version
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          echo "New version: $NEW_VERSION"
+
+          # Update Cargo.toml
+          sed -i "s/^version = \"$VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml
+
+      - name: Commit and Tag
+        run: |
+          VERSION=$(grep '^version =' Cargo.toml | head -n 1 | cut -d '"' -f 2)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: automated 97-day version bump to $VERSION"
+          git tag "v$VERSION"
+          git push origin main --tags
