@@ -31,9 +31,9 @@ if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
 Write-Host "Copying binary to $InstallPath..." -ForegroundColor Cyan
 Copy-Item $ReleasePath -Destination $InstallPath -Force
 
-if (Test-Path "config.toml") {
-    Write-Host "Copying config.toml to $InstallPath..." -ForegroundColor Cyan
-    Copy-Item "config.toml" -Destination $InstallPath -Force
+if (Test-Path ".env") {
+    Write-Host "Copying .env to $InstallPath..." -ForegroundColor Cyan
+    Copy-Item ".env" -Destination $InstallPath -Force
 }
 
 # 5. Create/Update service
