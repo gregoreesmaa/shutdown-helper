@@ -13,7 +13,9 @@ pub struct Config {
 impl Config {
     pub fn load() -> Result<Self> {
         let exe_path = std::env::current_exe()?;
-        let exe_dir = exe_path.parent().ok_or_else(|| anyhow::anyhow!("Could not find executable directory"))?;
+        let exe_dir = exe_path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Could not find executable directory"))?;
         let config_path = exe_dir.join("config.toml");
 
         if !config_path.exists() {
@@ -24,7 +26,9 @@ impl Config {
                 log_dir: "logs".to_string(),
             };
             let toml = toml::to_string_pretty(&default_config)?;
-            fs::write(&config_path, toml)?;
+            if let Err(e) = fs::write(&config_path, toml) {
+                eprintln!("Warning: Failed to write default config to disk: {}", e);
+            }
             return Ok(default_config);
         }
 

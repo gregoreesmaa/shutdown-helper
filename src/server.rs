@@ -6,8 +6,10 @@ use axum::{
     routing::post,
     Router,
 };
+use constant_time_eq::constant_time_eq;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::watch;
 use tower_http::trace::TraceLayer;
 use tracing::{error, info, warn};
 
@@ -38,7 +40,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-pub async fn run_server(config: Config) -> Result<()> {
+pub async fn run_server(config: Config, shutdown_rx: Option<watch::Receiver<()>>) -> Result<()> {
     let port = config.port;
     let bind_address = config.bind_address.clone();
     let state = Arc::new(AppState {
@@ -53,11 +55,21 @@ pub async fn run_server(config: Config) -> Result<()> {
     info!("Starting server on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(
+    let serve = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await?;
+    );
+
+    if let Some(mut rx) = shutdown_rx {
+        serve
+            .with_graceful_shutdown(async move {
+                let _ = rx.changed().await;
+                info!("Graceful shutdown signal received");
+            })
+            .await?;
+    } else {
+        serve.await?;
+    }
 
     Ok(())
 }
@@ -67,11 +79,13 @@ async fn shutdown_handler(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    let addr = connect_info.map(|ci| ci.0.ip().to_string()).unwrap_or_else(|| "unknown".to_string());
-    let auth_header = headers.get("X-Auth-Token");
+    let addr = connect_info
+        .map(|ci| ci.0.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let auth_token = headers.get("X-Auth-Token").and_then(|v| v.to_str().ok());
 
-    match auth_header {
-        Some(token) if token == state.config.auth_token.as_str() => {
+    match auth_token {
+        Some(token) if constant_time_eq(token.as_bytes(), state.config.auth_token.as_bytes()) => {
             info!(
                 "Shutdown requested from {}. Authorization successful.",
                 addr

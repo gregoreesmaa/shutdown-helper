@@ -9,6 +9,9 @@ use crate::config::Config;
 use crate::logger::init_logging;
 use crate::server::run_server;
 use anyhow::Result;
+use std::path::PathBuf;
+#[cfg(windows)]
+use tokio::sync::watch;
 use tracing::{error, info};
 
 #[cfg(windows)]
@@ -45,13 +48,22 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn get_absolute_log_dir(log_dir: &str) -> Result<PathBuf> {
+    let exe_path = std::env::current_exe()?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Could not find executable directory"))?;
+    Ok(exe_dir.join(log_dir))
+}
+
 fn run_standalone() -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let config = Config::load().expect("Failed to load config");
-        let _guard = init_logging(&config.log_dir);
+        let abs_log_dir = get_absolute_log_dir(&config.log_dir).expect("Failed to resolve log directory");
+        let _guard = init_logging(abs_log_dir.to_str().expect("Invalid log path"));
         info!("Running as standalone application");
-        if let Err(e) = run_server(config).await {
+        if let Err(e) = run_server(config, None).await {
             error!("Server error: {}", e);
         }
     });
@@ -67,9 +79,14 @@ fn service_main(_arguments: Vec<std::ffi::OsString>) {
 
 #[cfg(windows)]
 fn run_service() -> Result<()> {
+    let (shutdown_tx, shutdown_rx) = watch::channel(());
+
     let event_handler = move |control_event| -> ServiceControlHandlerResult {
         match control_event {
-            ServiceControl::Stop => ServiceControlHandlerResult::NoError,
+            ServiceControl::Stop => {
+                let _ = shutdown_tx.send(());
+                ServiceControlHandlerResult::NoError
+            }
             ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
             _ => ServiceControlHandlerResult::NotImplemented,
         }
@@ -90,9 +107,10 @@ fn run_service() -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let config = Config::load().expect("Failed to load config");
-        let _guard = init_logging(&config.log_dir);
+        let abs_log_dir = get_absolute_log_dir(&config.log_dir).expect("Failed to resolve log directory");
+        let _guard = init_logging(abs_log_dir.to_str().expect("Invalid log path"));
         info!("Running as Windows Service");
-        if let Err(e) = run_server(config).await {
+        if let Err(e) = run_server(config, Some(shutdown_rx)).await {
             error!("Server error: {}", e);
         }
     });
