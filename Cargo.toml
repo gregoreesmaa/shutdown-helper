@@ -15,3 +15,10 @@ windows-service = "0.7"
 system_shutdown = "4.0"
 tower-http = { version = "0.5", features = ["trace"] }
 tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

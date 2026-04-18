@@ -6,7 +6,8 @@ $ReleasePath = "target\release\$BinaryName"
 $InstallPath = "C:\Program Files\ShutdownHelper"
 
 # 1. Build the project
-Write-Host "Building project in release mode..." -ForegroundColor Cyan
+Write-Host "Building project with maximum optimizations..." -ForegroundColor Cyan
+$env:RUSTFLAGS = "-C target-cpu=native"
 cargo build --release
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed!"
