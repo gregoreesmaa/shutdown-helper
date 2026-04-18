@@ -23,13 +23,21 @@ jobs:
       - name: Build release
         run: cargo build --release
 
+      - name: Prepare Release Artifacts
+        run: |
+          mkdir release-bundle
+          cp target/release/shutdown-helper.exe release-bundle/
+          cp setup.ps1 release-bundle/
+          # Create a template .env but don't force it
+          echo "BIND_ADDRESS=0.0.0.0:7986" > release-bundle/.env
+          echo "AUTH_TOKEN=change-me-secret-token" >> release-bundle/.env
+          echo "LOG_DIR=logs" >> release-bundle/.env
+          Compress-Archive -Path release-bundle/* -DestinationPath shutdown-helper-windows.zip
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            target/release/shutdown-helper.exe
-            setup.ps1
-            .env
+          files: shutdown-helper-windows.zip
           draft: false
           prerelease: false
           generate_release_notes: true

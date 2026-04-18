@@ -27,7 +27,7 @@ const SERVICE_NAME: &str = "ShutdownHelper";
 #[cfg(windows)]
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
-const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1:8080";
+const DEFAULT_BIND_ADDRESS: &str = "0.0.0.0:7986";
 const DEFAULT_AUTH_TOKEN: &str = "change-me-secret-token";
 const DEFAULT_LOG_DIR: &str = "logs";
 
