@@ -976,6 +976,7 @@ dependencies = [
 name = "shutdown-helper"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
  "serde",
  "system_shutdown",

@@ -1,3 +1,4 @@
+#Requires -RunAsAdministrator
 # Shutdown Helper Setup Script
 
 $ServiceName = "ShutdownHelper"

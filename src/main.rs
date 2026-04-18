@@ -8,7 +8,8 @@ mod tests;
 use crate::config::Config;
 use crate::logger::init_logging;
 use crate::server::run_server;
-use tracing::info;
+use anyhow::Result;
+use tracing::{error, info};
 
 #[cfg(windows)]
 use windows_service::{
@@ -28,7 +29,7 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 #[cfg(windows)]
 define_windows_service!(ffi_service_main, service_main);
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     #[cfg(windows)]
     {
         if let Err(_e) = service_dispatcher::start(SERVICE_NAME, ffi_service_main) {
@@ -44,26 +45,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_standalone() -> Result<(), Box<dyn std::error::Error>> {
+fn run_standalone() -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let config = Config::load().expect("Failed to load config");
         let _guard = init_logging(&config.log_dir);
         info!("Running as standalone application");
-        run_server(config).await;
+        if let Err(e) = run_server(config).await {
+            error!("Server error: {}", e);
+        }
     });
     Ok(())
 }
 
 #[cfg(windows)]
 fn service_main(_arguments: Vec<std::ffi::OsString>) {
-    if let Err(_e) = run_service() {
-        // Handle error
+    if let Err(e) = run_service() {
+        error!("Service failure: {}", e);
     }
 }
 
 #[cfg(windows)]
-fn run_service() -> Result<(), Box<dyn std::error::Error>> {
+fn run_service() -> Result<()> {
     let event_handler = move |control_event| -> ServiceControlHandlerResult {
         match control_event {
             ServiceControl::Stop => ServiceControlHandlerResult::NoError,
@@ -89,7 +92,9 @@ fn run_service() -> Result<(), Box<dyn std::error::Error>> {
         let config = Config::load().expect("Failed to load config");
         let _guard = init_logging(&config.log_dir);
         info!("Running as Windows Service");
-        run_server(config).await;
+        if let Err(e) = run_server(config).await {
+            error!("Server error: {}", e);
+        }
     });
 
     status_handle.set_service_status(ServiceStatus {

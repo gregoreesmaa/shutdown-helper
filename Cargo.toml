@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = "0.7"
+anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 toml = { version = "0.8", features = ["preserve_order"] }
 tracing = "0.1"

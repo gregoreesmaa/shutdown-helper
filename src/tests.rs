@@ -10,7 +10,7 @@ use crate::server::{create_router, AppState, ShutdownProvider};
 
 struct MockShutdownProvider;
 impl ShutdownProvider for MockShutdownProvider {
-    fn shutdown(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn shutdown(&self) -> anyhow::Result<()> {
         // Just return OK for tests
         Ok(())
     }
@@ -20,6 +20,7 @@ impl ShutdownProvider for MockShutdownProvider {
 async fn test_shutdown_authorized() {
     let config = Config {
         port: 8080,
+        bind_address: "127.0.0.1".to_string(),
         auth_token: "test-token".to_string(),
         log_dir: "test-logs".to_string(),
     };
@@ -51,6 +52,7 @@ async fn test_shutdown_authorized() {
 async fn test_shutdown_unauthorized() {
     let config = Config {
         port: 8080,
+        bind_address: "127.0.0.1".to_string(),
         auth_token: "test-token".to_string(),
         log_dir: "test-logs".to_string(),
     };
@@ -97,6 +99,7 @@ async fn test_shutdown_unauthorized() {
 fn test_config_serialization() {
     let config = Config {
         port: 1234,
+        bind_address: "127.0.0.1".to_string(),
         auth_token: "abc".to_string(),
         log_dir: "logs".to_string(),
     };

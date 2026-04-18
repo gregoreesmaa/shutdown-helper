@@ -1,3 +1,4 @@
+use anyhow::Result;
 use axum::{
     extract::{ConnectInfo, State},
     http::{HeaderMap, StatusCode},
@@ -7,20 +8,21 @@ use axum::{
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tower_http::trace::TraceLayer;
 use tracing::{error, info, warn};
 
 use crate::config::Config;
 
 /// Trait to allow mocking the shutdown behavior in tests
 pub trait ShutdownProvider: Send + Sync {
-    fn shutdown(&self) -> Result<(), Box<dyn std::error::Error>>;
+    fn shutdown(&self) -> Result<()>;
 }
 
 pub struct RealShutdownProvider;
 
 impl ShutdownProvider for RealShutdownProvider {
-    fn shutdown(&self) -> Result<(), Box<dyn std::error::Error>> {
-        system_shutdown::shutdown().map_err(|e| e.into())
+    fn shutdown(&self) -> Result<()> {
+        system_shutdown::shutdown().map_err(|e| anyhow::anyhow!(e))
     }
 }
 
@@ -32,11 +34,13 @@ pub struct AppState {
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/shutdown", post(shutdown_handler))
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
 
-pub async fn run_server(config: Config) {
+pub async fn run_server(config: Config) -> Result<()> {
     let port = config.port;
+    let bind_address = config.bind_address.clone();
     let state = Arc::new(AppState {
         config,
         shutdown_provider: Box::new(RealShutdownProvider),
@@ -44,16 +48,18 @@ pub async fn run_server(config: Config) {
 
     let app = create_router(state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let addr_str = format!("{}:{}", bind_address, port);
+    let addr: SocketAddr = addr_str.parse()?;
     info!("Starting server on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .await
-    .unwrap();
+    .await?;
+
+    Ok(())
 }
 
 async fn shutdown_handler(
