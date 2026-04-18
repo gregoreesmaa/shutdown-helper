@@ -32,8 +32,13 @@ Write-Host "Copying binary to $InstallPath..." -ForegroundColor Cyan
 Copy-Item $ReleasePath -Destination $InstallPath -Force
 
 if (Test-Path ".env") {
-    Write-Host "Copying .env to $InstallPath..." -ForegroundColor Cyan
-    Copy-Item ".env" -Destination $InstallPath -Force
+    $DestEnv = Join-Path $InstallPath ".env"
+    if (!(Test-Path $DestEnv)) {
+        Write-Host "Copying .env to $InstallPath..." -ForegroundColor Cyan
+        Copy-Item ".env" -Destination $InstallPath -Force
+    } else {
+        Write-Host ".env already exists in $InstallPath. Skipping copy to preserve configuration." -ForegroundColor Yellow
+    }
 }
 
 # 5. Create/Update service
