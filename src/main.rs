@@ -5,10 +5,10 @@ use std::sync::mpsc;
 #[cfg(windows)]
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{env, fs};
+use std::{env, fs, path::PathBuf};
 
 use constant_time_eq::constant_time_eq;
-use dotenvy::dotenv;
+use dotenvy::from_path;
 use log::{info, warn, LevelFilter};
 use simplelog::{Config, WriteLogger};
 
@@ -36,18 +36,23 @@ const MAX_HEADERS: usize = 16;
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
+    let exe_path = env::current_exe()?;
+    let base_dir = exe_path.parent().ok_or("Could not find executable directory")?;
+
+    // Load .env from the executable directory
+    let env_path = base_dir.join(".env");
+    let _ = from_path(env_path);
 
     #[cfg(windows)]
     {
         if let Err(_e) = service_dispatcher::start(SERVICE_NAME, ffi_service_main) {
-            run_server_loop()?;
+            run_server_loop(base_dir.to_path_buf())?;
         }
     }
 
     #[cfg(not(windows))]
     {
-        run_server_loop()?;
+        run_server_loop(base_dir.to_path_buf())?;
     }
 
     Ok(())
@@ -58,13 +63,19 @@ define_windows_service!(ffi_service_main, service_main);
 
 #[cfg(windows)]
 fn service_main(_arguments: Vec<std::ffi::OsString>) {
-    if let Err(e) = run_service() {
-        warn!("Service failure: {}", e);
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(base_dir) = exe_path.parent() {
+            if let Err(e) = run_service(base_dir.to_path_buf()) {
+                warn!("Service failure: {}", e);
+            }
+            return;
+        }
     }
+    warn!("Service failed to initialize base directory");
 }
 
 #[cfg(windows)]
-fn run_service() -> Result<(), Box<dyn std::error::Error>> {
+fn run_service(base_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let (tx, rx) = mpsc::channel();
 
     let event_handler = move |control_event| -> ServiceControlHandlerResult {
@@ -91,8 +102,9 @@ fn run_service() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     // Start server in background thread
-    thread::spawn(|| {
-        if let Err(e) = run_server_loop() {
+    let server_dir = base_dir.clone();
+    thread::spawn(move || {
+        if let Err(e) = run_server_loop(server_dir) {
             warn!("Server loop exited with error: {}", e);
         }
     });
@@ -113,14 +125,16 @@ fn run_service() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn init_logging(log_dir: &str) -> Result<(), Box<dyn std::error::Error>> {
-    fs::create_dir_all(log_dir)?;
+fn init_logging(base_dir: &PathBuf, log_dir_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let log_dir = base_dir.join(log_dir_name);
+    fs::create_dir_all(&log_dir)?;
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)?
         .as_secs();
 
-    let log_path = format!("{}/shutdown-helper-{}.log", log_dir, timestamp);
+    let log_filename = format!("shutdown-helper-{}.log", timestamp);
+    let log_path = log_dir.join(log_filename);
 
     let log_file = fs::File::create(log_path)?;
     WriteLogger::init(LevelFilter::Info, Config::default(), log_file)?;
@@ -128,9 +142,9 @@ fn init_logging(log_dir: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_server_loop() -> Result<(), Box<dyn std::error::Error>> {
-    let log_dir = env::var("LOG_DIR").unwrap_or_else(|_| DEFAULT_LOG_DIR.to_string());
-    init_logging(&log_dir)?;
+fn run_server_loop(base_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    let log_dir_name = env::var("LOG_DIR").unwrap_or_else(|_| DEFAULT_LOG_DIR.to_string());
+    init_logging(&base_dir, &log_dir_name)?;
 
     let addr_str = env::var("BIND_ADDRESS").unwrap_or_else(|_| DEFAULT_BIND_ADDRESS.to_string());
     let addr: SocketAddr = addr_str.parse()?;
