@@ -56,16 +56,16 @@ wake_on_lan:
 
 rest_command:
   shutdown_computer:
-    url: "http://telkutaga:7986/shutdown"
+    url: "http://192.168.1.50:7986/shutdown" # Replace with your PC's IP or hostname
     method: POST
     headers:
       X-Auth-Token: "YOUR_SECRET_TOKEN"
 
 switch:
   - platform: wake_on_lan
-    mac: 74:56:3C:E5:BE:AD
+    mac: "AA:BB:CC:DD:EE:FF" # Replace with your PC's MAC address
     name: "Computer"
-    host: telkutaga
+    host: "192.168.1.50" # Replace with your PC's IP or hostname
     turn_off:
       action: rest_command.shutdown_computer
 ```
