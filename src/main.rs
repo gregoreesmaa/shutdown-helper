@@ -2,11 +2,15 @@ mod config;
 mod logger;
 mod server;
 
-use std::sync::Arc;
+#[cfg(test)]
+mod tests;
+
 use crate::config::Config;
 use crate::logger::init_logging;
 use crate::server::run_server;
 use tracing::info;
+
+#[cfg(windows)]
 use windows_service::{
     define_windows_service,
     service::{
@@ -15,36 +19,50 @@ use windows_service::{
     service_control_handler::{self, ServiceControlHandlerResult},
     service_dispatcher,
 };
-use std::ffi::OsString;
-use std::time::Duration;
 
+#[cfg(windows)]
 const SERVICE_NAME: &str = "ShutdownHelper";
+#[cfg(windows)]
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
+#[cfg(windows)]
 define_windows_service!(ffi_service_main, service_main);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Check if we're running as a service
-    if let Err(_e) = service_dispatcher::start(SERVICE_NAME, ffi_service_main) {
-        // If not running as a service, just run as a regular console app
-        // This is useful for debugging
-        let rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(async {
-            let config = Config::load().expect("Failed to load config");
-            let _guard = init_logging(&config.log_dir);
-            info!("Running as standalone application");
-            run_server(Arc::new(config)).await;
-        });
+    #[cfg(windows)]
+    {
+        if let Err(_e) = service_dispatcher::start(SERVICE_NAME, ffi_service_main) {
+            run_standalone()?;
+        }
     }
+
+    #[cfg(not(windows))]
+    {
+        run_standalone()?;
+    }
+
     Ok(())
 }
 
-fn service_main(_arguments: Vec<OsString>) {
+fn run_standalone() -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let config = Config::load().expect("Failed to load config");
+        let _guard = init_logging(&config.log_dir);
+        info!("Running as standalone application");
+        run_server(config).await;
+    });
+    Ok(())
+}
+
+#[cfg(windows)]
+fn service_main(_arguments: Vec<std::ffi::OsString>) {
     if let Err(_e) = run_service() {
         // Handle error
     }
 }
 
+#[cfg(windows)]
 fn run_service() -> Result<(), Box<dyn std::error::Error>> {
     let event_handler = move |control_event| -> ServiceControlHandlerResult {
         match control_event {
@@ -62,7 +80,7 @@ fn run_service() -> Result<(), Box<dyn std::error::Error>> {
         controls_accepted: ServiceControlAccept::STOP,
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
-        wait_hint: Duration::default(),
+        wait_hint: std::time::Duration::default(),
         process_id: None,
     })?;
 
@@ -71,7 +89,7 @@ fn run_service() -> Result<(), Box<dyn std::error::Error>> {
         let config = Config::load().expect("Failed to load config");
         let _guard = init_logging(&config.log_dir);
         info!("Running as Windows Service");
-        run_server(Arc::new(config)).await;
+        run_server(config).await;
     });
 
     status_handle.set_service_status(ServiceStatus {
@@ -80,7 +98,7 @@ fn run_service() -> Result<(), Box<dyn std::error::Error>> {
         controls_accepted: ServiceControlAccept::empty(),
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
-        wait_hint: Duration::default(),
+        wait_hint: std::time::Duration::default(),
         process_id: None,
     })?;
 

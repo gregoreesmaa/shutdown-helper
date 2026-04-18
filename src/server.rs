@@ -11,12 +11,40 @@ use tracing::{error, info, warn};
 
 use crate::config::Config;
 
-pub async fn run_server(config: Arc<Config>) {
-    let app = Router::new()
-        .route("/shutdown", post(shutdown_handler))
-        .with_state(config.clone());
+/// Trait to allow mocking the shutdown behavior in tests
+pub trait ShutdownProvider: Send + Sync {
+    fn shutdown(&self) -> Result<(), Box<dyn std::error::Error>>;
+}
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+pub struct RealShutdownProvider;
+
+impl ShutdownProvider for RealShutdownProvider {
+    fn shutdown(&self) -> Result<(), Box<dyn std::error::Error>> {
+        system_shutdown::shutdown().map_err(|e| e.into())
+    }
+}
+
+pub struct AppState {
+    pub config: Config,
+    pub shutdown_provider: Box<dyn ShutdownProvider>,
+}
+
+pub fn create_router(state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/shutdown", post(shutdown_handler))
+        .with_state(state)
+}
+
+pub async fn run_server(config: Config) {
+    let port = config.port;
+    let state = Arc::new(AppState {
+        config,
+        shutdown_provider: Box::new(RealShutdownProvider),
+    });
+
+    let app = create_router(state);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("Starting server on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -29,21 +57,22 @@ pub async fn run_server(config: Arc<Config>) {
 }
 
 async fn shutdown_handler(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
-    State(config): State<Arc<Config>>,
+    State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    let addr = connect_info.map(|ci| ci.0.ip().to_string()).unwrap_or_else(|| "unknown".to_string());
     let auth_header = headers.get("X-Auth-Token");
 
     match auth_header {
-        Some(token) if token == config.auth_token.as_str() => {
+        Some(token) if token == state.config.auth_token.as_str() => {
             info!(
                 "Shutdown requested from {}. Authorization successful.",
-                addr.ip()
+                addr
             );
 
-            // Graceful shutdown attempt
-            match system_shutdown::shutdown() {
+            // Attempt shutdown using the provider
+            match state.shutdown_provider.shutdown() {
                 Ok(_) => {
                     info!("Shutdown signal sent successfully.");
                     (StatusCode::OK, "Shutdown initiated").into_response()
@@ -57,7 +86,7 @@ async fn shutdown_handler(
         _ => {
             warn!(
                 "Unauthorized shutdown attempt from {}. Invalid or missing token.",
-                addr.ip()
+                addr
             );
             (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
         }
