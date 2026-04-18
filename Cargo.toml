@@ -1,16 +1,16 @@
 [package]
 name = "shutdown-helper"
-version = "1.0.4"
+version = "1.0.5"
 edition = "2024"
 
 [dependencies]
 constant_time_eq = "0.3"
 httparse = "1.10"
+system_shutdown = "4.0"
 log = "0.4"
 simplelog = "0.12"
 dotenvy = "0.15"
 windows-service = "0.7"
-windows-sys = { version = "0.52", features = ["Win32_System_Shutdown", "Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
 
 [profile.release]
 opt-level = "z"
