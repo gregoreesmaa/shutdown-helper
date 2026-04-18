@@ -17,21 +17,40 @@ permissions:
 jobs:
   bump-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && ( $(( $(date +%s) / 86400 % 97 )) == 0 ))
+    if: always()
     steps:
+      - name: Check if it's the 97th day
+        id: check-day
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            # Calculate days since epoch and check modulo 97
+            DAYS=$(( $(date +%s) / 86400 ))
+            if (( DAYS % 97 == 0 )); then
+              echo "run=true" >> $GITHUB_OUTPUT
+            else
+              echo "run=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
       - name: Checkout code
+        if: steps.check-day.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Install Rust
+        if: steps.check-day.outputs.run == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Update dependencies
+        if: steps.check-day.outputs.run == 'true'
         run: cargo update
 
       - name: Bump patch version
+        if: steps.check-day.outputs.run == 'true'
         run: |
           # Read current version
           VERSION=$(grep '^version =' Cargo.toml | head -n 1 | cut -d '"' -f 2)
@@ -47,6 +66,7 @@ jobs:
           sed -i "s/^version = \"$VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml
 
       - name: Commit and Tag
+        if: steps.check-day.outputs.run == 'true'
         run: |
           VERSION=$(grep '^version =' Cargo.toml | head -n 1 | cut -d '"' -f 2)
           git config user.name "github-actions[bot]"
