@@ -154,6 +154,7 @@ fn run_server_loop(base_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> 
 
     let listener = TcpListener::bind(&addr)?;
     info!("Server listening on {}", addr);
+    log::logger().flush();
 
     for stream in listener.incoming() {
         match stream {
@@ -166,6 +167,8 @@ fn run_server_loop(base_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> 
                 match handle_connection(&mut stream, auth_token, &peer_addr) {
                     Ok(true) => {
                         info!("Shutdown signal received and authorized from {}. Shutting down system.", peer_addr);
+                        // Force commit the log to disk before the OS kills the process
+                        log::logger().flush();
                         let _ = system_shutdown::shutdown();
                         break;
                     }
